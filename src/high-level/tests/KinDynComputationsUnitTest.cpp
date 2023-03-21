@@ -656,6 +656,31 @@ void testSubModelConsistency(std::string modelFilePath, const FrameVelocityRepre
             ok = dynCompReducedModel.setRobotState(baseFullTbaseReduced, qReducedModel, baseVelReducedModel, dqReducedModel, gravity);
             ASSERT_IS_TRUE(ok);
 
+            iDynTree::Vector6 baseAcc;
+            for(int i=0; i < 6; i++)
+            {
+                baseAcc(i) = real_random_double();
+            }
+
+            iDynTree::VectorDynSize ddqjFullModel(fullModel.getNrOfDOFs());
+            for(int i=0; i < fullModel.getNrOfDOFs(); i++)
+            {
+                ddqjFullModel(i) = real_random_double();
+            }
+
+            VectorDynSize ddqReducedModel(reducedModel.getNrOfDOFs());
+
+            for(JointIndex jntIdx = 0; jntIdx < reducedModel.getNrOfJoints(); jntIdx++)
+             {
+                size_t posCoordsOffsetReducedModel = reducedModel.getJoint(jntIdx)->getPosCoordsOffset();
+                JointIndex jntIdxFullModel = idxJntReducedModelInFullModel(jntIdx);
+                size_t posCoordsOffsetFullModel = fullModel.getJoint(jntIdxFullModel)->getPosCoordsOffset();
+                for(size_t localPosCoords = 0; localPosCoords < reducedModel.getJoint(jntIdx)->getNrOfPosCoords(); localPosCoords ++)
+                {
+                    ddqReducedModel(posCoordsOffsetReducedModel+localPosCoords) = ddqjFullModel(posCoordsOffsetFullModel+localPosCoords);
+                }
+             }
+
             // Compare pose and velocity per each link from full model and from reduced model
             for(FrameIndex frameIdxReducedModel = 0; frameIdxReducedModel < reducedModel.getNrOfFrames(); frameIdxReducedModel++)
             {
@@ -678,6 +703,14 @@ void testSubModelConsistency(std::string modelFilePath, const FrameVelocityRepre
                 Twist frameVelReducedModel = dynCompReducedModel.getFrameVel(frameName);
 
                 ASSERT_EQUAL_VECTOR(frameVelFullModel, frameVelReducedModel);
+
+                iDynTree::Vector6 frameAccFullModel = dynCompFullModel.getFrameAcc(frameName, baseAcc, ddqjFullModel);
+
+                iDynTree::Vector6 baseSubModelAcceleration = dynCompFullModel.getFrameAcc(dynCompReducedModel.getFloatingBase(), baseAcc, ddqjFullModel);
+
+                iDynTree::Vector6 frameAccSubModel = dynCompReducedModel.getFrameAcc(frameName, baseSubModelAcceleration, ddqReducedModel);
+
+                ASSERT_EQUAL_VECTOR(frameAccFullModel, frameAccSubModel);
             }
 
         }
@@ -809,7 +842,7 @@ void testAbsoluteJacobianSparsity(KinDynComputations & dynComp)
 
 void testSparsityPattern(std::string modelFilePath, const FrameVelocityRepresentation frameVelRepr)
 {
-	iDynTree::KinDynComputations dynComp;
+    iDynTree::KinDynComputations dynComp;
     iDynTree::ModelLoader mdlLoader;
     bool ok = mdlLoader.loadModelFromFile(modelFilePath);
     ok = ok && dynComp.loadRobotModel(mdlLoader.model());
